@@ -43,9 +43,10 @@ class AioShopCrawler:
         await main()
 
         df = pd.DataFrame(self.brands)
-        df.drop_duplicates(inplace=True)
+        df.sort_values(by=["ctime"], inplace=True)
+        df.drop_duplicates(['username', 'shopid'], keep="last", inplace=True)
         df.sort_values(by="username", inplace=True)
-
+        df.reset_index(drop=True, inplace=True)
         return df
 
 

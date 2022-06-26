@@ -1,0 +1,8 @@
+{
+    "editor.formatOnSave": true,
+    "python.formatting.provider": "yapf", // or "black" here
+    "python.formatting.yapfArgs": [
+        "--style=facebook",
+    ],
+    "python.linting.pylintEnabled": false,
+}
