@@ -1,0 +1,9 @@
+FastAPI
+uvicorn
+pydantic[dotenv]
+sqlalchemy
+psycopg2-binary
+pandas
+requests
+aiohttp
+databases[asyncpg]

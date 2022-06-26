@@ -22,6 +22,9 @@ class ShopeeShop(Base):
 
     __table_args__ = (
         sa.UniqueConstraint('username', 'shopid', name='_username_shopid_uc'),
+        sa.Index('shopee_shop_username_idx', 'username'),
+        sa.Index('shopee_shop_shopid_idx', 'shopid'),
+        sa.Index('shopee_shop_brand_name_idx', 'brand_name'),
     )
 
 
@@ -43,6 +46,13 @@ class ShopeeProduct(Base):
 
     crawled_at = sa.Column(sa.TIMESTAMP, default=datetime.datetime.now)
 
+    __table_args__ = (
+        sa.Index('shopee_product_itemid_idx', 'itemid'),
+        sa.Index('shopee_product_shopid_idx', 'shopid'),
+        sa.Index('shopee_product_name_idx', 'name'),
+        sa.Index('shopee_product_crawled_at_idx', 'crawled_at'),
+    )
+
 
 class ShopeeProductModel(Base):
     __tablename__ = "shopee_product_model"
@@ -53,3 +63,10 @@ class ShopeeProductModel(Base):
     price = sa.Column(sa.Float)
 
     crawled_at = sa.Column(sa.TIMESTAMP, default=datetime.datetime.now)
+
+    __table_args__ = (
+        sa.Index('shopee_product_model_itemid_idx', 'itemid'),
+        sa.Index('shopee_product_model_modelid_idx', 'modelid'),
+        sa.Index('shopee_product_model_name_idx', 'name'),
+        sa.Index('shopee_product_model_crawled_at_idx', 'crawled_at'),
+    )
