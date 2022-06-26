@@ -1,5 +1,6 @@
 import asyncio
 import aiohttp
+import datetime
 import typing
 import pandas as pd
 
@@ -199,15 +200,72 @@ class AioShopProductsCrawler:
         return df
 
 
-if __name__ == "__main__":
-    shops_df = asyncio.run(AioShopCrawler()())
-    # shops_df.to_csv("./all_shops.csv")
+class AioProductModelsCrawler:
+    def __init__(self) -> None:
+        self.item_models = []
+
+    async def __call__(
+        self, item_shop_list: typing.List[tuple]
+    ) -> pd.DataFrame:
+        def extract_model_fields(models):
+            need_fields = ['itemid', 'modelid', 'name', 'price']
+            new_models = []
+            for model in models:
+                new_model = {key: model[key] for key in need_fields}
+                new_models.append(new_model)
+            return new_models
+
+        async def get_item_info(aioclient, itemid, shopid):
+            url = "https://shopee.tw/api/v4/item/get"
+            params = {
+                "itemid": itemid,
+                "shopid": shopid,
+            }
+            async with aioclient.get(url, params=params) as resp:
+                resp_json = await resp.json()
+                models = resp_json["data"]["models"]
+                self.item_models.extend(extract_model_fields(models))
+
+        async def main():
+            nonlocal item_shop_list
+            async with aiohttp.ClientSession() as session:
+                tasks = [
+                    get_item_info(session, itemid, shopid)
+                    for itemid, shopid in item_shop_list
+                ]
+                await asyncio.gather(*tasks)
+
+        await main()
+
+        df = pd.DataFrame(self.item_models)
+        df.drop_duplicates(inplace=True)
+
+        return df
+
+
+async def main():
+    shops_df = await AioShopCrawler()()
+    shops_df.to_csv("./all_shops.csv", index=False)
     # shops_df = pd.read_csv("./all_shops.csv")
 
     # 只選擇某些店家做 POC
     cond = shops_df['username'] == "google.tw"
     shopids = shops_df[cond].shopid.tolist()
 
-    shop_products_df = asyncio.run(AioShopProductsCrawler()(shopids))
+    shop_products_df = await AioShopProductsCrawler()(shopids)
 
-    shop_products_df.to_csv("./all_products.csv")
+    shop_products_df.to_csv("./all_products.csv", index=False)
+
+    item_shop_list = list(
+        zip(
+            shop_products_df["itemid"].to_list(),
+            shop_products_df["shopid"].to_list()
+        )
+    )
+    product_models_df = await AioProductModelsCrawler()(item_shop_list)
+    product_models_df["created_at"] = datetime.datetime.now().isoformat()
+    product_models_df.to_csv("./product_models.csv", index=False)
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
