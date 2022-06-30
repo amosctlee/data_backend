@@ -1,7 +1,8 @@
-from typing import Optional
+from typing import Optional, List
 from fastapi import FastAPI, status
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from databases import Database
+import asyncio
 
 import sqlalchemy as sa
 
@@ -31,37 +32,82 @@ async def shutdown():
     await database.disconnect()
 
 
-@app.get("/product/")
-async def search_product(
-    product_name: str, shop_name: str = "google.tw"
-) -> dict:
-    product_models_stmt = """
-    WITH shop_product_history AS (
-        SELECT
-            shop.username, shop.shopid, shop.brand_name,
-            product.itemid, product.name AS product_name,
-            product.price AS product_price,
-            product.price_min AS product_price_min,
-            product.price_max AS product_price_max
-        FROM shopee_shop AS shop
-        LEFT JOIN shopee_product AS product
-        ON shop.shopid = product.shopid
+shopee_url_template = "https://shopee.tw/{}-i.{}.{}"  # name, shopid, itemid
+momo_url_template = "https://m.momoshop.com.tw{}"  # product_url_path
 
-        WHERE shop.username = :shop_name OR shop.brand_name LIKE :shop_name_pattern
 
-        ORDER BY shop.created_at, product.crawled_at
+class ProductOut(BaseModel):
+    name: str
+    price: float
+    url: str
+    id_: int = Field(..., alias="id")
+    platform: str
+
+
+def deduplicate_keep_first(items) -> list:
+    seen = set()
+    result = []
+    for item in items:
+        if not item["url"] in seen:
+            seen.add(item["url"])
+            result.append(item)
+    return result
+
+
+@app.get("/product/", response_model=List[ProductOut])
+async def search_product(product_name: str) -> List[ProductOut]:
+
+    shopee_stmt = """
+    SELECT * FROM public.shopee_product
+    WHERE name LIKE :product_name_pattern
+    ORDER BY crawled_at DESC LIMIT 10
+    """
+
+    momo_stmt = """
+    SELECT * from momo_product
+    WHERE product_name LIKE :product_name_pattern
+    ORDER BY crawled_at DESC LIMIT 10
+    """
+
+    values = {
+        "product_name_pattern":
+            "%{}%".format("%".join(product_name.strip().split(" ")))
+    }
+
+    shopee_result, momo_result = await asyncio.gather(
+        database.fetch_all(shopee_stmt, values=values),
+        database.fetch_all(momo_stmt, values=values)
     )
 
-    SELECT sph.*, p_model.modelid, p_model.name, p_model.price
-    FROM shop_product_history AS sph
-    LEFT JOIN shopee_product_model AS p_model
-    ON sph.itemid = p_model.itemid
+    shopee_products = [
+        {
+            "platform":
+                "shopee",
+            "id":
+                row["id"],
+            "name":
+                row["name"],
+            "price":
+                row["price"],
+            "url":
+                shopee_url_template.format(
+                    row["name"], row["shopid"], row["itemid"]
+                ),
+        } for row in shopee_result
+    ]
 
-    """
-    values = {
-        "shop_name": shop_name,
-        "shop_name_pattern": "%" + shop_name + "%",
-        # "product_name": product_name
-    }
-    result = await database.fetch_all(product_models_stmt, values=values)
-    return {"product_name": product_name, "shop_name": shop_name, "r": result}
+    momo_products = [
+        {
+            "platform": "momo",
+            "id": row["id"],
+            "name": row["product_name"],
+            "price": row["product_price_parsed"],
+            "url": momo_url_template.format(row["product_url_path"]),
+        } for row in momo_result
+    ]
+
+    mix = shopee_products + momo_products
+    mix.sort(key=lambda x: x["id"], reverse=True)  # let the latest one be first
+    mix.sort(key=lambda x: x["price"], reverse=False)
+
+    return deduplicate_keep_first(mix)

@@ -6,8 +6,9 @@ from sqlalchemy.orm import sessionmaker
 
 import db_model
 import crawlers
+from settings import settings
 
-engine = sa.create_engine(os.environ["DB_URI"])
+engine = sa.create_engine(settings.DB_URI)
 Session = sessionmaker(bind=engine)
 db_model.Base.metadata.create_all(engine)
 
@@ -20,6 +21,7 @@ class ShopeeRunner:
 
         cond = shop_df["username"] == shop_username
         shop_products_df = await self.crawl_product_to_db(shop_df[cond])
+        assert len(shop_products_df) > 0
 
         product_models_df = await self.crawl_product_model_to_db(
             shop_products_df
@@ -179,12 +181,16 @@ class MomoRunner:
 async def async_crawl():
     runner = ShopeeRunner()
     await runner(shop_username="google.tw")
+    await runner(shop_username="microsoft_tw")
+    await runner(shop_username="3mofficial")
 
 
 def crawl():
     momo_runner = MomoRunner()
     momo_runner.crawl_brand_to_db()
     momo_runner.crawl_product_to_db(brand_name="Google")
+    momo_runner.crawl_product_to_db(brand_name="Microsoft微軟")
+    momo_runner.crawl_product_to_db(brand_name="3M")
 
 
 if __name__ == "__main__":

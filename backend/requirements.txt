@@ -7,3 +7,4 @@ pandas
 requests
 aiohttp
 databases[asyncpg]
+bs4
